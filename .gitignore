@@ -1,0 +1,19 @@
+data/raw/
+data/processed/
+*.parquet
+__pycache__/
+.venv/
+venv/
+.pytest_cache/
+*.pyc
+.env
+airflow.db
+airflow.cfg
+webserver_config.py
+standalone_admin_password.txt
+simple_auth_manager_passwords.json.generated
+airflow-webserver.pid
+logs/
+.ipynb_checkpoints/
+# Local interview notes — do not publish
+docs/

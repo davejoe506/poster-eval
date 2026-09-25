@@ -1,0 +1,89 @@
+# PosterEval local stack: Airflow (8080) + FastAPI (8000)
+# Airflow UI: http://localhost:8080  (admin / admin)
+# API docs:   http://localhost:8000/docs
+
+x-airflow-common: &airflow-common
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: airflow
+  environment:
+    AIRFLOW_UID: ${AIRFLOW_UID:-50000}
+    _AIRFLOW_WWW_USER_USERNAME: ${_AIRFLOW_WWW_USER_USERNAME:-admin}
+    _AIRFLOW_WWW_USER_PASSWORD: ${_AIRFLOW_WWW_USER_PASSWORD:-admin}
+    AIRFLOW__CORE__EXECUTOR: SequentialExecutor
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+    AIRFLOW__CORE__DAG_DISCOVERY_SAFE_MODE: "false"
+    AIRFLOW__WEBSERVER__EXPOSE_CONFIG: "true"
+    AIRFLOW__WEBSERVER__SECRET_KEY: postereval-dev-not-for-production
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: sqlite:////opt/airflow/airflow.db
+    POSTEREVAL_HOME: /opt/poster-eval
+    POSTEREVAL_DATA_DIR: /opt/poster-eval/data/processed
+    POSTEREVAL_DB_PATH: /opt/poster-eval/data/processed/postereval.db
+    POSTEREVAL_N_IMPRESSIONS: ${POSTEREVAL_N_IMPRESSIONS:-20000}
+    POSTEREVAL_N_TITLES: ${POSTEREVAL_N_TITLES:-200}
+    POSTEREVAL_N_USERS: ${POSTEREVAL_N_USERS:-500}
+    POSTEREVAL_SEED: ${POSTEREVAL_SEED:-42}
+    POSTEREVAL_PROPENSITY_MODEL: ${POSTEREVAL_PROPENSITY_MODEL:-xgboost}
+    PYTHONPATH: /opt/poster-eval
+  volumes:
+    - ./dags:/opt/airflow/dags
+    - ./src:/opt/poster-eval/src
+    - ./sql:/opt/poster-eval/sql
+    - ./data:/opt/poster-eval/data
+    - ./scripts:/opt/poster-eval/scripts:ro
+    - airflow-logs:/opt/airflow/logs
+
+services:
+  airflow:
+    <<: *airflow-common
+    ports:
+      - "8080:8080"
+    # Standalone mints a random password; this script creates/resets the UI user first.
+    command:
+      [
+        "bash",
+        "-c",
+        "python /opt/poster-eval/scripts/airflow_entrypoint.py",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')\"",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 8
+      start_period: 90s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api
+    ports:
+      - "8000:8000"
+    environment:
+      POSTEREVAL_HOME: /opt/poster-eval
+      POSTEREVAL_DATA_DIR: /opt/poster-eval/data/processed
+      POSTEREVAL_DB_PATH: /opt/poster-eval/data/processed/postereval.db
+      PYTHONPATH: /opt/poster-eval
+    volumes:
+      - ./data:/opt/poster-eval/data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')\"",
+        ]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  airflow-logs:
