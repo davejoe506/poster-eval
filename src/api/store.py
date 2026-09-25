@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from pathlib import Path
@@ -139,14 +140,8 @@ def fetch_holdout(policy_id: str = DEFAULT_CANDIDATE) -> dict:
         if row is None:
             raise LookupError(f"No holdout validation found for policy '{policy_id}'")
 
-        estimator_rows = conn.execute(
-            """
-            SELECT estimator, estimated_value, std_error, estimation_error, ground_truth_value
-            FROM policy_evaluations
-            WHERE candidate_policy = ? AND eval_timestamp = ? AND popularity_tier IS NULL
-            """,
-            (policy_id, row["eval_timestamp"]),
-        ).fetchall()
+        raw_estimators = row["estimators_vs_holdout"] if "estimators_vs_holdout" in row.keys() else None
+        estimators = json.loads(raw_estimators) if raw_estimators else []
 
         return {
             "candidate_policy": policy_id,
@@ -157,7 +152,7 @@ def fetch_holdout(policy_id: str = DEFAULT_CANDIDATE) -> dict:
             "n_holdout": row["n_holdout"],
             "n_exploit": row["n_exploit"],
             "ground_truth_value": row["ground_truth_value"],
-            "estimators": [dict(r) for r in estimator_rows],
+            "estimators": estimators,
         }
     finally:
         conn.close()

@@ -73,10 +73,22 @@ def test_persist_policy_evaluations_writes_sqlite(tmp_path):
             {"estimator": "SNIPS", "value": 0.14, "std_error": 0.02},
             {"estimator": "IPS", "value": 0.15, "std_error": 0.03},
         ],
-        "validation_oracle_propensity": {"holdout_ground_truth": {"value": 0.13}},
+        "validation_oracle_propensity": {
+            "holdout_ground_truth": {"value": 0.13},
+            "estimators_vs_holdout": [
+                {
+                    "estimator": "SNIPS",
+                    "value": 0.125,
+                    "std_error": 0.02,
+                    "absolute_bias": 0.005,
+                    "signed_error": -0.005,
+                }
+            ],
+        },
     }
     persist_policy_evaluations(report, db)
 
+    import json
     import sqlite3
 
     conn = sqlite3.connect(db)
@@ -87,12 +99,22 @@ def test_persist_policy_evaluations_writes_sqlite(tmp_path):
         WHERE candidate_policy = 'bandit_v2' AND popularity_tier IS NULL
         """
     ).fetchall()
+    holdout_raw = conn.execute(
+        """
+        SELECT estimators_vs_holdout
+        FROM validation_metrics
+        WHERE candidate_policy = 'bandit_v2'
+        """
+    ).fetchone()[0]
     conn.close()
     by_estimator = {name: (value, err) for name, value, err in rows}
     assert by_estimator["IPS"][0] == pytest.approx(0.15)
     assert by_estimator["IPS"][1] == pytest.approx(0.02)
     assert by_estimator["SNIPS"][0] == pytest.approx(0.14)
     assert by_estimator["SNIPS"][1] == pytest.approx(0.01)
+    holdout_estimators = json.loads(holdout_raw)
+    assert holdout_estimators[0]["estimator"] == "SNIPS"
+    assert holdout_estimators[0]["value"] == pytest.approx(0.125)
 
 
 def test_dagbag_loads_without_import_errors():

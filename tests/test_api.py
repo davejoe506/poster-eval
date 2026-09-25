@@ -42,6 +42,26 @@ def _seed_report() -> dict:
             "rmse_across_estimators": 0.008,
             "n_holdout": 200,
             "n_exploit": 1800,
+            "estimators_vs_holdout": [
+                {
+                    "estimator": "IPS",
+                    "value": 0.128,
+                    "std_error": 0.04,
+                    "ground_truth": 0.133,
+                    "estimate": 0.128,
+                    "signed_error": -0.005,
+                    "absolute_bias": 0.005,
+                },
+                {
+                    "estimator": "SNIPS",
+                    "value": 0.128,
+                    "std_error": 0.021,
+                    "ground_truth": 0.133,
+                    "estimate": 0.128,
+                    "signed_error": -0.005,
+                    "absolute_bias": 0.005,
+                },
+            ],
         },
     }
 
@@ -112,6 +132,12 @@ def test_validation_holdout(client: TestClient):
     assert body["n_holdout"] == 200
     assert body["n_exploit"] == 1800
     assert body["ground_truth_value"] == pytest.approx(0.133)
+    by_estimator = {row["estimator"]: row for row in body["estimators"]}
+    assert set(by_estimator) == {"IPS", "SNIPS"}
+    assert by_estimator["SNIPS"]["value"] == pytest.approx(0.128)
+    assert by_estimator["SNIPS"]["absolute_bias"] == pytest.approx(0.005)
+    compare = client.get("/policies/compare")
+    assert by_estimator["SNIPS"]["value"] != pytest.approx(compare.json()["estimators"]["SNIPS"]["value"])
 
 
 def test_reports_stratified_by_tier(client: TestClient):

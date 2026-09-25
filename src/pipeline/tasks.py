@@ -143,14 +143,19 @@ def persist_policy_evaluations(report: dict, database: Path) -> None:
                 coverage_above_floor    REAL,
                 n_holdout               INTEGER,
                 n_exploit               INTEGER,
-                ground_truth_value      REAL
+                ground_truth_value      REAL,
+                estimators_vs_holdout   TEXT
             )
             """
         )
+        columns = {row[1] for row in conn.execute("PRAGMA table_info(validation_metrics)")}
+        if "estimators_vs_holdout" not in columns:
+            conn.execute("ALTER TABLE validation_metrics ADD COLUMN estimators_vs_holdout TEXT")
         timestamp = datetime.now(timezone.utc).isoformat()
         policy = report.get("candidate_policy", "bandit_v2")
         validation = report.get("validation_oracle_propensity") or {}
         gt = (validation.get("holdout_ground_truth") or {}).get("value")
+        holdout_estimators = validation.get("estimators_vs_holdout") or []
 
         def _insert(policy_id: str, row: dict, tier: str | None) -> None:
             value = float(row["value"])
@@ -190,8 +195,8 @@ def persist_policy_evaluations(report: dict, database: Path) -> None:
             INSERT INTO validation_metrics (
                 eval_timestamp, candidate_policy, snips_absolute_bias,
                 rmse_across_estimators, coverage_above_floor, n_holdout,
-                n_exploit, ground_truth_value
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                n_exploit, ground_truth_value, estimators_vs_holdout
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 timestamp,
@@ -202,6 +207,7 @@ def persist_policy_evaluations(report: dict, database: Path) -> None:
                 validation.get("n_holdout"),
                 validation.get("n_exploit"),
                 gt,
+                json.dumps(holdout_estimators),
             ),
         )
         conn.commit()
